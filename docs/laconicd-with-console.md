@@ -55,7 +55,7 @@ laconic-so version
 laconic-so --stack fixturenet-laconic-loaded setup-repositories --include github.com/cerc-io/laconicd,github.com/cerc-io/laconic-sdk,github.com/cerc-io/laconic-registry-cli,github.com/cerc-io/laconic-console
 ```
 
-2. Set this environment variable to the Laconic self-hosted Gitea instance:
+2. Set this environment variable to the Laconic self-hosted Gitea instance, which contains NPM packages consumed by the following step:
 
 ```
 export CERC_NPM_REGISTRY_URL=https://git.vdb.to/api/packages/cerc-io/npm/
