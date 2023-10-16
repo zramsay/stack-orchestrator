@@ -21,31 +21,52 @@ echo "$(date +"%Y-%m-%d %T"): Starting stack"
 $TEST_TARGET_SO --stack fixturenet-payments deploy --cluster payments up
 echo "$(date +"%Y-%m-%d %T"): Stack started"
 # Verify that the fixturenet is up and running
-$TEST_TARGET_SO --stack fixturenet-payments deploy ps
+$TEST_TARGET_SO --stack fixturenet-payments deploy --cluster payments ps
 
 # get watcher payments channel id
-WATCHER_UPSTREAM_PAYMENT_CHANNEL=$(docker logs $(docker ps -aq --filter name="mobymask-watcher-server") 2>&1 | \
-  grep "payment channel created with id" | \
-  grep -o '0x[0-9a-fA-F]\+')
+timeout=600 # 10 minutes
+echo "$(date +"%Y-%m-%d %T"): Waiting for watcher payment channel status 'Open'. Timeout set to $timeout seconds"
+start_time=$(date +%s)
+elapsed_time=0
+while [ -z "$WATCHER_UPSTREAM_PAYMENT_CHANNEL" ]  && [ $elapsed_time -lt $timeout ]; do
+  sleep 10
+  echo "$(date +"%Y-%m-%d %T"): Waiting for channel..."
+  WATCHER_UPSTREAM_PAYMENT_CHANNEL=$(docker logs $(docker ps -aq --filter name="mobymask-watcher-server") 2>&1 | \
+    grep "payment channel created with id" | \
+    grep -o '0x[0-9a-fA-F]\+') \
+    || true
+  current_time=$(date +%s)
+  elapsed_time=$((current_time - start_time))
+done
+
 echo "Watcher payment channel id: $WATCHER_UPSTREAM_PAYMENT_CHANNEL"
 
 # check watcher payment channel status. Expected result: 'Open'
 query="Status:"
 watcher_query_result=$(docker exec payments-nitro-rpc-client-1 npm exec -c "nitro-rpc-client get-payment-channel $WATCHER_UPSTREAM_PAYMENT_CHANNEL -h ipld-eth-server -p 4005" | \
   grep "$query" | \
-  grep -o "'.*'")
+  grep -o "'.*'") \
+  || true
 
-# run ponder indexer for 120s and get ponder payments channel id
-PONDER_UPSTREAM_PAYMENT_CHANNEL=$(docker exec -it payments-ponder-app-indexer-1 bash -c "DEBUG=laconic:payments timeout 30s pnpm start" | \
+# run ponder indexer for 180s and get ponder payments channel id
+timeout=180
+PONDER_UPSTREAM_PAYMENT_CHANNEL=$(docker exec -it payments-ponder-app-indexer-1 bash -c "DEBUG=laconic:payments timeout ${timeout}s pnpm start" | \
   grep "Using payment channel" | \
-  grep -o '0x[0-9a-fA-F]\+')
-echo "Ponder payment channel id: $PONDER_UPSTREAM_PAYMENT_CHANNEL"
+  grep -o '0x[0-9a-fA-F]\+') \
+  || true
 
-# query ponder payment channel, Expected result: PaidSoFar is nonzero
-query="PaidSoFar"
-ponder_query_result=$(docker exec payments-nitro-rpc-client-1 npm exec -c "nitro-rpc-client get-payment-channel $PONDER_UPSTREAM_PAYMENT_CHANNEL -h ipld-eth-server -p 4005" | \
-  grep "$query" | \
-  grep -o '[0-9]\+')
+if [[ -z "$PONDER_UPSTREAM_PAYMENT_CHANNEL" ]]; then
+  echo "Ponder payment channel id not found."
+  ponder_query_result=0
+else
+  echo "Ponder payment channel id: $PONDER_UPSTREAM_PAYMENT_CHANNEL"
+  # query ponder payment channel, Expected result: PaidSoFar is nonzero
+  query="PaidSoFar"
+  ponder_query_result=$(docker exec payments-nitro-rpc-client-1 npm exec -c "nitro-rpc-client get-payment-channel $PONDER_UPSTREAM_PAYMENT_CHANNEL -h ipld-eth-server -p 4005" | \
+    grep "$query" | \
+    grep -o '[0-9]\+') \
+    || true
+fi
 
 if [[ "$watcher_query_result" == "'Open'" && "$ponder_query_result" -gt 0 ]]; then
   echo "Test passed"

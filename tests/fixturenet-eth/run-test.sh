@@ -43,6 +43,7 @@ subsequent_block_number=$initial_block_number
 # if initial block was 0 after timeout, assume chain did not start successfully and skip finding subsequent block
 if [[ $initial_block_number -gt 0 ]]; then
   timeout=300
+  echo "$(date +"%Y-%m-%d %T"): Getting subsequent block number. Timeout set to $timeout seconds"
   start_time=$(date +%s)
   elapsed_time=0
   # wait for 5 blocks or timeout
